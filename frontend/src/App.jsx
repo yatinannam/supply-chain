@@ -10,7 +10,7 @@ import {
   Database,
   Eye,
   ArrowUpDown,
-  DollarSign,
+  IndianRupee,
   LayoutDashboard,
   Package2,
   Plus,
@@ -36,7 +36,7 @@ const navItems = [
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
-  currency: "USD",
+  currency: "INR",
   maximumFractionDigits: 2,
 });
 
@@ -271,15 +271,44 @@ function SupplyChainApp() {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
 
-    await api.createOrder({
-      retailerId: Number(formData.get("retailerId")),
-      totalAmount: Number(formData.get("totalAmount")),
-      orderStatus: formData.get("orderStatus"),
-    });
+    try {
+      let retailerId = Number(formData.get("retailerId"));
+      const createNewRetailer = formData.get("createNewRetailer") === "on";
 
-    setToast("Order saved to MySQL.");
-    closeModal();
-    await loadAllData();
+      if (createNewRetailer) {
+        const retailerName = String(formData.get("newRetailerName") || "").trim();
+        if (!retailerName) {
+          throw new Error("New retailer name is required.");
+        }
+
+        const createdRetailer = await api.createRetailer({
+          retailerName,
+          contact: String(formData.get("newRetailerContact") || "").trim() || null,
+          location: String(formData.get("newRetailerLocation") || "").trim() || null,
+        });
+
+        retailerId = createdRetailer.retailerId;
+      } else if (!retailerId) {
+        throw new Error("Please select an existing retailer or create a new one.");
+      }
+
+      const inventoryItemId = formData.get("inventoryItemId");
+      const inventoryQuantity = Number(formData.get("inventoryQuantity") || 1);
+
+      await api.createOrder({
+        retailerId,
+        totalAmount: Number(formData.get("totalAmount")),
+        orderStatus: formData.get("orderStatus"),
+        inventoryItemId: inventoryItemId ? Number(inventoryItemId) : null,
+        inventoryQuantity,
+      });
+
+      setToast("Order saved to MySQL.");
+      closeModal();
+      await loadAllData();
+    } catch (createError) {
+      setToast(createError.message || "Unable to create the order.");
+    }
   };
 
   const submitInventoryEdit = async (event) => {
@@ -289,7 +318,6 @@ function SupplyChainApp() {
     await api.updateInventory(modal.payload.itemId, {
       quantity: Number(formData.get("quantity")),
       warehouse: formData.get("warehouse"),
-      lowStockThreshold: Number(formData.get("lowStockThreshold")),
     });
 
     setToast("Inventory updated in MySQL.");
@@ -520,18 +548,40 @@ function SupplyChainApp() {
               onSubmit={submitOrderCreate}
               onClose={closeModal}
             >
-              <Field label="Retailer">
-                <select name="retailerId" className="input-base" defaultValue="">
-                  <option value="" disabled>
-                    Select retailer
-                  </option>
-                  {activeRetailerOptions.map((retailer) => (
-                    <option key={retailer.retailerId} value={retailer.retailerId}>
-                      {retailer.retailerName}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              <div className="md:col-span-2 rounded-3xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Retailer</p>
+                <div className="mt-4 grid gap-4">
+                  <Field label="Select existing retailer">
+                    <select name="retailerId" className="input-base" defaultValue="">
+                      <option value="" disabled>
+                        Select retailer
+                      </option>
+                      {activeRetailerOptions.map((retailer) => (
+                        <option key={retailer.retailerId} value={retailer.retailerId}>
+                          {retailer.retailerName}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <label className="flex items-center gap-3 text-sm text-slate-200">
+                    <input type="checkbox" name="createNewRetailer" className="h-4 w-4 rounded border-white/20 bg-transparent text-sky-400" />
+                    Create a new retailer instead
+                  </label>
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <Field label="New retailer name">
+                      <input name="newRetailerName" className="input-base" placeholder="CityMart" />
+                    </Field>
+                    <Field label="Contact">
+                      <input name="newRetailerContact" className="input-base" placeholder="9876001111" />
+                    </Field>
+                    <Field label="Location">
+                      <input name="newRetailerLocation" className="input-base" placeholder="Bangalore" />
+                    </Field>
+                  </div>
+                </div>
+              </div>
               <Field label="Total amount">
                 <input name="totalAmount" className="input-base" type="number" step="0.01" placeholder="0.00" />
               </Field>
@@ -543,6 +593,29 @@ function SupplyChainApp() {
                   <option>Delivered</option>
                 </select>
               </Field>
+              <div className="md:col-span-2 rounded-3xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Optional inventory link</p>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <Field label="Reserve inventory item">
+                    <select name="inventoryItemId" className="input-base" defaultValue="">
+                      <option value="">No inventory link</option>
+                      {inventory
+                        .filter((item) => Number(item.quantity || 0) > 0)
+                        .map((item) => (
+                          <option key={item.itemId} value={item.itemId}>
+                            #{item.itemId} - {item.materialType || "Inventory item"} ({item.warehouse || "Warehouse"}, qty {item.quantity})
+                          </option>
+                        ))}
+                    </select>
+                  </Field>
+                  <Field label="Inventory quantity">
+                    <input name="inventoryQuantity" className="input-base" type="number" min="1" defaultValue="1" />
+                  </Field>
+                </div>
+                <p className="mt-3 text-xs leading-6 text-slate-400">
+                  Only items with stock available are shown here. If you pick one, its quantity will be reduced when the order is saved.
+                </p>
+              </div>
             </DemoForm>
           ) : null}
 
@@ -572,18 +645,15 @@ function SupplyChainApp() {
           {modal.type === "inventory-edit" ? (
             <DemoForm
               title={`Update stock for item ${modal.payload?.itemId ?? ""}`}
-              description="Persist the stock update directly to MySQL."
+              description="Update quantity or move the stock to another existing warehouse location. Low stock is calculated automatically from quantity."
               onSubmit={submitInventoryEdit}
               onClose={closeModal}
             >
               <Field label="Current quantity">
                 <input name="quantity" className="input-base" type="number" defaultValue={modal.payload?.quantity ?? 0} />
               </Field>
-              <Field label="Warehouse">
-                <input name="warehouse" className="input-base" defaultValue={modal.payload?.warehouse ?? ""} />
-              </Field>
-              <Field label="Low stock threshold">
-                <input name="lowStockThreshold" className="input-base" type="number" defaultValue={modal.payload?.lowStockThreshold ?? 0} />
+              <Field label="Warehouse location">
+                <input name="warehouse" className="input-base" placeholder="Chennai" defaultValue={modal.payload?.warehouse ?? ""} />
               </Field>
             </DemoForm>
           ) : null}
@@ -647,7 +717,7 @@ function DashboardPage({ summary, recentOrders, lowStockItems, onNavigate }) {
       label: "Total Revenue",
       value: formatCurrency(summary.totalRevenue || 0),
       description: "Gross value of order volume.",
-      icon: DollarSign,
+      icon: IndianRupee,
       tone: "emerald",
     },
     {
@@ -873,7 +943,10 @@ function InventoryPage({ inventory, onEditItem }) {
       const searchMatch =
         !normalizedSearch ||
         String(item.itemId).includes(normalizedSearch) ||
-        String(item.itemName || "").toLowerCase().includes(normalizedSearch) ||
+        String(item.batchId || "").includes(normalizedSearch) ||
+        String(item.materialType || "").toLowerCase().includes(normalizedSearch) ||
+        String(item.qualityGrade || "").toLowerCase().includes(normalizedSearch) ||
+        String(item.supplierName || "").toLowerCase().includes(normalizedSearch) ||
         String(item.warehouse || "").toLowerCase().includes(normalizedSearch);
 
       const lowStockMatch = !onlyLowStock || item.isLowStock;
@@ -886,6 +959,8 @@ function InventoryPage({ inventory, onEditItem }) {
 
   const columns = [
     { key: "itemId", label: "Item ID", sortable: true },
+    { key: "batch", label: "Batch / Material", sortable: true },
+    { key: "supplier", label: "Supplier", sortable: true },
     { key: "quantity", label: "Quantity", sortable: true },
     { key: "warehouse", label: "Warehouse", sortable: true },
     { key: "status", label: "Stock Status", sortable: false },
@@ -903,7 +978,10 @@ function InventoryPage({ inventory, onEditItem }) {
   };
 
   return (
-    <SectionCard title="Inventory visibility" subtitle="Low stock highlights appear in red for quick action">
+    <SectionCard
+      title="Inventory visibility"
+      subtitle="Each row is a stock item tied to a batch, raw material, supplier, and warehouse. It is not directly linked to orders."
+    >
       <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="relative w-full xl:max-w-md">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -911,7 +989,7 @@ function InventoryPage({ inventory, onEditItem }) {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="input-base pl-11"
-            placeholder="Search item id, warehouse, or item name"
+            placeholder="Search item, batch, material, supplier, or warehouse"
           />
         </div>
 
@@ -935,6 +1013,16 @@ function InventoryPage({ inventory, onEditItem }) {
         emptyMessage="No inventory rows match the selected filters."
         rowRenderer={(row) => ({
           itemId: `#${row.itemId}`,
+          batch: (
+            <div className="space-y-1">
+              <p className="font-medium text-white">Batch #{row.batchId}</p>
+              <p className="text-xs text-slate-400">
+                {row.materialType || "Material"}
+                {row.qualityGrade ? ` · Grade ${row.qualityGrade}` : ""}
+              </p>
+            </div>
+          ),
+          supplier: row.supplierName || "-",
           quantity: <span className={cx(row.isLowStock ? "text-rose-200" : "text-white")}>{row.quantity}</span>,
           warehouse: row.warehouse,
           status: <StatusBadge value={row.isLowStock ? "Low Stock" : "Healthy"} />,
@@ -1315,8 +1403,22 @@ function OrderDetailModal({ loading, detail, fallbackOrder }) {
   }
 
   const order = detail?.order || fallbackOrder;
+  const relatedInvoice = detail?.relatedInvoice;
   const relatedPayment = detail?.relatedPayment;
   const relatedShipment = detail?.relatedShipment;
+  const retailerLocation = order?.retailerLocation;
+
+  const paymentMessage = relatedPayment
+    ? null
+    : relatedInvoice
+      ? "An invoice exists, but no payment row is linked to it yet."
+      : "No invoice exists for this order yet, so payment cannot be linked.";
+
+  const shipmentMessage = relatedShipment
+    ? null
+    : retailerLocation
+      ? `No shipment route currently matches ${retailerLocation}.`
+      : "No shipment route is linked to this retailer yet.";
 
   return (
     <div className="space-y-5">
@@ -1336,7 +1438,7 @@ function OrderDetailModal({ loading, detail, fallbackOrder }) {
               <StatusBadge value={relatedShipment.shipmentStatus} />
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No shipment record is linked yet.</p>
+            <p className="text-sm leading-6 text-slate-400">{shipmentMessage}</p>
           )}
         </DetailBlock>
 
@@ -1348,7 +1450,7 @@ function OrderDetailModal({ loading, detail, fallbackOrder }) {
               <StatusBadge value={relatedPayment.status} />
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No payment record is linked yet.</p>
+            <p className="text-sm leading-6 text-slate-400">{paymentMessage}</p>
           )}
         </DetailBlock>
       </div>

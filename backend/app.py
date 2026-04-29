@@ -5,6 +5,7 @@ from db import (
     create_order,
     create_payment,
     create_shipment,
+    create_retailer,
     get_dashboard_data,
     get_inventory,
     get_order_detail,
@@ -67,11 +68,19 @@ def create_order_route():
     retailer_id = data.get("retailerId")
     total_amount = data.get("totalAmount")
     order_status = data.get("orderStatus", "Pending")
+    inventory_item_id = data.get("inventoryItemId")
+    inventory_quantity = data.get("inventoryQuantity", 1)
 
     if retailer_id is None or total_amount is None:
         return jsonify({"error": "retailerId and totalAmount are required"}), 400
 
-    created = create_order(int(retailer_id), float(total_amount), order_status)
+    created = create_order(
+        int(retailer_id),
+        float(total_amount),
+        order_status,
+        inventory_item_id=int(inventory_item_id) if inventory_item_id not in (None, "") else None,
+        inventory_quantity=int(inventory_quantity) if inventory_quantity not in (None, "") else 1,
+    )
     return jsonify(created), 201
 
 
@@ -200,6 +209,20 @@ def update_payment_route(payment_id):
 @app.get("/api/retailers")
 def retailers():
     return jsonify(get_retailers())
+
+
+@app.post("/api/retailers")
+def create_retailer_route():
+    data = request.get_json(silent=True) or {}
+    retailer_name = data.get("retailerName")
+    contact = data.get("contact")
+    location = data.get("location")
+
+    if not retailer_name:
+        return jsonify({"error": "retailerName is required"}), 400
+
+    created = create_retailer(retailer_name, contact=contact, location=location)
+    return jsonify(created), 201
 
 
 @app.get("/api/table-overview")

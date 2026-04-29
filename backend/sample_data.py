@@ -7,6 +7,8 @@ SAMPLE_RETAILERS = [
     {"retailerId": 3, "retailerName": "Urban Bazaar"},
 ]
 
+RETAILER_STORE = deepcopy(SAMPLE_RETAILERS)
+
 SAMPLE_ORDERS = [
     {
         "orderId": 1001,
@@ -188,4 +190,42 @@ def payments_from_sample():
 
 
 def retailers_from_sample():
-    return _copy(SAMPLE_RETAILERS)
+    return _copy(RETAILER_STORE)
+
+
+def create_retailer(retailer_name, contact=None, location=None):
+    next_id = max((retailer["retailerId"] for retailer in RETAILER_STORE), default=0) + 1
+    retailer = {
+        "retailerId": next_id,
+        "retailerName": retailer_name,
+        "contact": contact or "",
+        "location": location or "",
+    }
+    RETAILER_STORE.append(retailer)
+    return _copy(retailer)
+
+
+def create_order(retailer_id, total_amount, order_status="Pending", inventory_item_id=None, inventory_quantity=1):
+    next_id = max((order["orderId"] for order in SAMPLE_ORDERS), default=1000) + 1
+    retailer_name = next(
+        (retailer["retailerName"] for retailer in RETAILER_STORE if retailer["retailerId"] == retailer_id),
+        "Sample Retailer",
+    )
+    order = {
+        "orderId": next_id,
+        "retailerId": retailer_id,
+        "retailerName": retailer_name,
+        "orderStatus": order_status,
+        "totalAmount": float(total_amount),
+        "createdAt": "2026-04-29",
+    }
+    SAMPLE_ORDERS.insert(0, order)
+
+    if inventory_item_id is not None:
+        for item in SAMPLE_INVENTORY:
+            if item["itemId"] == inventory_item_id:
+                item["quantity"] = max(0, item["quantity"] - int(inventory_quantity))
+                item["isLowStock"] = item["quantity"] < item["lowStockThreshold"]
+                break
+
+    return _copy(order)

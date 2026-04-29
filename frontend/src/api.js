@@ -35,5 +35,6 @@ export const api = {
   updatePayment: (paymentId, payload) => request(`/payments/${paymentId}`, { method: "PUT", body: JSON.stringify(payload) }),
   deletePayment: (paymentId) => request(`/payments/${paymentId}`, { method: "DELETE" }),
   retailers: () => request("/retailers"),
+  createRetailer: (payload) => request("/retailers", { method: "POST", body: JSON.stringify(payload) }),
   tableOverview: () => request("/table-overview"),
 };
