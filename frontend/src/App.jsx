@@ -423,7 +423,7 @@ function SupplyChainApp() {
             </nav>
 
             <div className="mt-4 rounded-[24px] border border-white/10 bg-slate-950/60 p-4">
-              <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Quick facts</p>
+              <p className="text-xs text-center uppercase tracking-[0.28em] text-slate-400">Key</p>
               <div className="mt-3 space-y-3 text-sm text-slate-200">
                 <QuickFact label="Total Orders" value={summary.totalOrders} />
                 <QuickFact label="Pending Orders" value={summary.pendingOrders} />
@@ -683,7 +683,7 @@ function SupplyChainApp() {
                 <input name="amount" className="input-base" type="number" step="0.01" placeholder="0.00" defaultValue={modal.payload?.amount ?? ""} />
               </Field>
               <Field label="Status">
-                <select name="paymentStatus" className="input-base" defaultValue={modal.payload?.status ?? "Paid"}>
+                <select name="paymentStatus" className="input-base" defaultValue={modal.payload?.status ?? "Pending"}>
                   <option>Paid</option>
                   <option>Pending</option>
                   <option>Failed</option>
